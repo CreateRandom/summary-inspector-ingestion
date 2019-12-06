@@ -1,0 +1,10 @@
+dnspython
+editdistance
+lxml
+-e git+https://github.com/blaze/odo.git#egg=odo
+nltk
+matplotlib
+pandas
+python-Levenshtein
+pymongo
+tqdm

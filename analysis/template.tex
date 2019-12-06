@@ -1,0 +1,50 @@
+\documentclass[a5paper]{article}
+\usepackage[dvipsnames]{xcolor}
+\usepackage[margin=0.5in]{geometry}
+\usepackage{tikz}
+\usepackage{soul}
+\usetikzlibrary{calc}
+\pagestyle{empty}
+
+\BLOCK{ for color_name in color_names }
+\colorlet{light\VAR{color_name}}{\VAR{color_name}!60!}
+\BLOCK{ endfor }
+
+\begin{document}
+
+% \section*{\VAR{system_name}}
+
+\newlength{\maxwidth}
+\setlength{\maxwidth}{0.88\textwidth}
+
+\begin{tikzpicture}[]
+  \node (A) at (0,0)      {};
+  \node (B) at (\maxwidth,5in)  {};
+  %\draw ($(A)-(2pt,2pt)$) rectangle ($(B)+(2pt,2pt)$);
+  \clip (A) rectangle (B);
+
+  \node[below right,
+        inner sep=0pt,
+        outer sep=0pt,
+        text width=+\maxwidth,
+        align=justify] (myparbox) at (A|-B)
+    {\VAR{article_text}};
+\end{tikzpicture}
+
+\vspace{\baselineskip}
+
+
+\VAR{summary_text}
+
+\BLOCK{ if copy_index }
+\begin{center}
+\scriptsize
+Copy \VAR{copy_index} out of \VAR{num_copies}
+\end{center}
+\BLOCK{ endif }
+\begin{flushright}
+\tiny
+\VAR{article_id}
+\end{flushright}{}
+
+\end{document}
