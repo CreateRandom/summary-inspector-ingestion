@@ -1,6 +1,6 @@
 dnspython
 editdistance
-lxml
+jinja2
 -e git+https://github.com/blaze/odo.git#egg=odo
 nltk
 matplotlib

@@ -1,3 +1,4 @@
+import copy
 import random
 import re
 
@@ -9,6 +10,7 @@ from pymongo import MongoClient
 from tqdm import tqdm
 
 from utils.sentence_diff import word_tokenize, strip_special
+
 
 def draw_sample(collection, article_ids, n=30, seed=42):
     entries = list(collection.find({}))
@@ -37,90 +39,120 @@ latex_jinja_env = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.abspath('/'))
 )
 template_file = 'template.tex'
-template = latex_jinja_env.get_template(os.path.realpath(template_file))
+card_template = latex_jinja_env.get_template(os.path.realpath(template_file))
 
 
 def render_to_card(dict, out_file):
-    renderer_template = template.render(**dict)
+    renderer_template = card_template.render(**dict)
     with open(out_file, "w") as f:  # saves tex_code to output file
         f.write(renderer_template)
     subprocess.call(['pdflatex', out_file, '--interaction=batchmode', '-aux-directory=aux'])
 
+template_file = 'sent_example_template.tex'
+example_template = latex_jinja_env.get_template(os.path.realpath(template_file))
 
-sent_highlight_colors = ['blue', 'cyan', 'green', 'lime', 'magenta', 'olive', 'orange', 'pink', 'purple', 'red', 'teal',
+def render_to_example_box(dict):
+    example_box = example_template.render(**dict)
+    return example_box
+
+
+default_colors = ['blue', 'cyan', 'green', 'lime', 'magenta', 'olive', 'orange', 'pink', 'purple', 'red', 'teal',
                          'violet', 'yellow']
 
-
-def render_summary_to_card(id, summary_collection, article_collection):
+def generate_latex_markup(id, summary_collection, article_collection, subset=None, highlight_altered=True,
+                          sent_highlight_colors=None):
+    if not sent_highlight_colors:
+        sent_highlight_colors = default_colors
     article_text = article_collection.find_one({'_id': id})['article']
     art_sents = article_text.split('\n\n')
     art_sents = [word_tokenize(sent) for sent in art_sents]
-
     art_sent_dict = dict(enumerate(art_sents))
 
     summary = summary_collection.find_one({'_id': id})
     summary_analysis = summary['analysis']
-    all_sents_referenced = set()
-    new_sents = []
-    for i, analysis in enumerate(summary_analysis):
-        highlight_color = sent_highlight_colors[i % len(sent_highlight_colors)]
-        # use a light color if this is a VERBATIM copy
-        if analysis['type'] == 'VERBATIM':
-            highlight_color = 'light' + highlight_color
+    summ_sents = summary[summary_collection.name].split('\n\n')
+    summ_sents = [word_tokenize(sent) for sent in summ_sents]
+    summ_sent_dict = dict(enumerate(summ_sents))
 
-        sent_words = analysis['sent_words']
-        # for each word: which sentence it originated from
-        state_vector = analysis['state_vector']
-        for i, article_sent_id in enumerate(state_vector):
-            if isinstance(article_sent_id, int):
-                all_sents_referenced.add(article_sent_id)
-                # color the word in the summary
-                word_to_color = sent_words[i]
-                sent_words[i] = '\\textcolor{' + highlight_color + '}{' + sent_words[i] + '}'
-                # get the right sentence to color
-                art_sent_to_edit = art_sent_dict[article_sent_id]
-                # strip the special characters
-                stripped_sent_words = [strip_special(x) for x in art_sent_to_edit]
-                if word_to_color in stripped_sent_words:
-                    word_id = stripped_sent_words.index(word_to_color)
-                    # make sure this word has not been hightlighted before
+    all_sents_referenced = set()
+    new_summ_sents = []
+    if subset:
+        generator = subset
+    else:
+        generator = range(len(summary_analysis))
+    for i in generator:
+        analysis = summary_analysis[i]
+        analysis = copy.deepcopy(analysis)
+        highlight_color = sent_highlight_colors[i % len(sent_highlight_colors)]
+
+        summ_sent = summ_sent_dict[i]
+
+        highlighted_ranges = analysis['highlighted_ranges']
+
+        for j, ranges in highlighted_ranges.items():
+            id = int(j)
+            # get the right sentence to color
+            art_sent_to_edit = art_sent_dict[id]
+
+            all_sents_referenced.add(id)
+
+            for word_range in ranges:
+                in_ind_sent, out_ind_sent, in_ind_doc_sent, out_ind_doc_sent = word_range
+
+                for word_id in range(in_ind_doc_sent, out_ind_doc_sent):
                     if not art_sent_to_edit[word_id].startswith('\\textcolor'):
                         art_sent_to_edit[word_id] = '\\textcolor{' + highlight_color + '}{' + art_sent_to_edit[
                             word_id] + '}'
-                else:
-                    print(f'Missing {word_to_color} for {summary_collection}, sent_id: {article_sent_id}')
+
+                for word_id in range(in_ind_sent, out_ind_sent):
+                    if not summ_sent[word_id].startswith('\\textcolor'):
+                        summ_sent[word_id] = '\\textcolor{' + highlight_color + '}{' + \
+                                             summ_sent[word_id] + '}'
 
         # mark up sentences that are not copied verbatim
-        if not analysis['type'] == 'VERBATIM':
-            sent_words.insert(0, '$\star$')
+        if not analysis['type'] == 'VERBATIM' and highlight_altered:
+            summ_sent.insert(0, '$\star$')
 
-        new_sent = ' '.join(sent_words)
-        new_sents.append(new_sent)
-
-    summary_text = '\\\\ \n'.join(new_sents)
-    # get the sentence furthest into document
-    max_id = max(all_sents_referenced)
+        new_sent = ' '.join(summ_sent)
+        new_summ_sents.append(new_sent)
 
     art_sents = list(art_sent_dict.values())
     art_sents = [' '.join(sent_words) for sent_words in art_sents]
+
+    return art_sents, new_summ_sents, all_sents_referenced
+
+def sanitize_latex(string_in):
+    # dollar sign for comments in tex, so escape it
+    string_in = string_in.replace('$', '\$')
+    string_in = string_in.replace('%', '\%')
+    # escape underscores within words
+    string_in = re.sub(r'(.*)_(.*)', '\\1\_\\2', string_in)
+    # delete trailing spaces in front of some special characters
+    string_in = re.sub(r' ([,!?:’)])', '\\1', string_in)
+    string_in = re.sub(r'([(] )', '\\1', string_in)
+    string_in = re.sub(r' (\'s)', '\\1', string_in)
+    return string_in
+
+
+def render_summary_to_card(id, summary_collection, article_collection):
+    art_sents, new_summ_sents, all_sents_referenced = generate_latex_markup(id, summary_collection, article_collection)
+
+    summary_text = '\\\\ \n'.join(new_summ_sents)
+    # get the sentence furthest into document
+    max_id = max(all_sents_referenced)
+
     cutoff = min(max_id + 2, len(art_sents))
     art_sents = art_sents[0:cutoff]
     article_text = '\n\n'.join(art_sents)
-
     article_text = article_text.replace('\n\n', '. ')
-    # dollar sign for comments in tex, so escape it
-    article_text = article_text.replace('$', '\$')
-    article_text = article_text.replace('%', '\%')
-    # escape underscores within words
-    article_text = re.sub(r'(.*)_(.*)', '\\1\_\\2', article_text)
-    # delete trailing spaces in front of some special characters
-    article_text = re.sub(r' ([,!?:’)])', '\\1', article_text)
-    article_text = re.sub(r'([(] )', '\\1', article_text)
-    article_text = re.sub(r' (\'s)', '\\1', article_text)
+
+    article_text = sanitize_latex(article_text)
 
     if not os.path.exists('generated'):
         os.makedirs('generated')
 
+    summary = summary_collection.find_one({'_id': id})
+    summary_analysis = summary['analysis']
     # make one extra copy for every non-verbatim sentence
     states = [x['type'] for x in summary_analysis if x['type'] != 'VERBATIM']
 
@@ -132,13 +164,40 @@ def render_summary_to_card(id, summary_collection, article_collection):
         n_copies = len(states)
 
         render_dict = {'article_id': id, 'article_text': article_text, 'summary_text': summary_text,
-                       'color_names': sent_highlight_colors}
+                       'color_names': default_colors}
         if n_copies > 1:
             render_dict['num_copies'] = n_copies
             render_dict['copy_index'] = i + 1
 
         render_to_card(render_dict, out_file)
 
+
+def render_sentence_example(id, summary_collection, article_collection, sent_index, in_context=1, out_context=1):
+    art_sents, summ_sent, all_sents_referenced \
+        = generate_latex_markup(id, summary_collection, article_collection,
+                                sent_highlight_colors= ['blue'],subset= [sent_index], highlight_altered=False)
+
+
+    summ_sent = sanitize_latex(summ_sent[0])
+    min_id = min(all_sents_referenced)
+    max_id = max(all_sents_referenced)
+
+    cut_in = max(min_id - in_context,0)
+    cut_out = min(max_id + out_context, len(art_sents))
+
+    article_text = '\n\n'.join(art_sents[cut_in:cut_out])
+    article_text = article_text.replace('\n\n', '. ')
+
+    if cut_in > 0:
+        article_text = '[...] ' + article_text
+    if cut_out < len(art_sents):
+        article_text = article_text + ' [...]'
+
+    article_text = sanitize_latex(article_text)
+
+    render_dict = {'summary_sent': summ_sent, 'article_text': article_text, 'system_name' : summary_collection.name}
+
+    return render_to_example_box(render_dict)
 
 if __name__ == '__main__':
     selected_samples = {}

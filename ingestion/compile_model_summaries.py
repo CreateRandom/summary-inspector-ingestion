@@ -191,7 +191,7 @@ def prepend_name(id, name):
 item_frame['see_id'] = item_frame.see_id.map(lambda x: prepend_name(x, 'see'))
 item_frame['chen_id'] = item_frame.chen_id.map(lambda x: prepend_name(x, 'chen'))
 item_frame['presumm_id'] = item_frame.presumm_id.map(lambda x: prepend_name(x, 'presumm'))
-item_frame['lm_id'] = item_frame.presumm_id.map(lambda x: prepend_name(x, 'lm'))
+item_frame['lm_id'] = item_frame.lm_id.map(lambda x: prepend_name(x, 'lm'))
 
 print(item_frame.head())
 
