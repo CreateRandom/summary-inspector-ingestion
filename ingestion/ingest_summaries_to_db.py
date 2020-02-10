@@ -114,20 +114,22 @@ def prepare_data_for_db(path_to_json, db):
     store_dataframe_in_db(lm, db.lm)
     del lm
 
-    # and one frame for the article content
-    article_frame = summary_frame[['article']].copy()
-    article_frame['_id'] = article_frame.index
+    store_articles = False
+    if store_articles:
+        # and one frame for the article content
+        article_frame = summary_frame[['article']].copy()
+        article_frame['_id'] = article_frame.index
 
-    def get_set_type(_id):
+        def get_set_type(_id):
 
-        if _id in ids_in_seed_set:
-            return 'seed'
-        else:
-            return 'unassigned'
+            if _id in ids_in_seed_set:
+                return 'seed'
+            else:
+                return 'unassigned'
 
-    # mark articles that were part of the seed set
-    article_frame['set'] = article_frame['_id'].apply(func=get_set_type)
-    store_dataframe_in_db(article_frame, db.articles_cnndm)
+        # mark articles that were part of the seed set
+        article_frame['set'] = article_frame['_id'].apply(func=get_set_type)
+        store_dataframe_in_db(article_frame, db.articles_cnndm)
 
 if __name__ == '__main__':
 

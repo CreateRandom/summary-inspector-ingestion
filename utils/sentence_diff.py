@@ -4,7 +4,7 @@ from collections import Counter
 import editdistance
 import numpy as np
 import difflib
-
+from rouge import Rouge
 from utils.text_utils import get_novel_ngrams
 
 def word_tokenize(string):
@@ -163,6 +163,9 @@ def analyze_sentence(sentence, document_sents):
     state = classify_result(result, document_sents_words)
     state['state_vector'] = state_vector
     state['highlighted_ranges'] = highlighted_ranges
+
+    state['rouge_with_closest'] = get_rouge_with_closest(result, document_sents_words)
+
     return state
 
 def unwrap_matches(matches, sent):
@@ -342,7 +345,6 @@ def analyze_diff_operations(opcodes, summary_sent_words, doc_sent_words):
             #   print('Remove {} from positions {}:{}'.format(doc_sent_words[i1:i2], i1, i2))
             # TODO possibly look at the context
             deletions.append({'deleted': doc_sent_words[i1:i2]})
-            n_op = n_op + 1
 
         elif tag == 'equal':
             length = i2 - i1
@@ -381,6 +383,23 @@ def get_opcodes(summary_sent_words, doc_sent_words):
 
     return opcodes
 
+def get_rouge_with_closest(result, document_sents_words):
+    sent_words = result['sent_words']
+    state_vector = result['state_vector']
+
+    only_ids = [x for x in state_vector if isinstance(x, int)]
+    if only_ids:
+        counts = Counter(only_ids)
+
+        # get the sentence with the closest overlap
+        closest, _ = counts.most_common(n=1)[0]
+
+        rouge = Rouge()
+        scores = rouge.get_scores(hyps=' '.join(document_sents_words[closest]), refs= ' '.join(sent_words))
+
+        return scores[0]
+
+    return None
 
 def classify_result(result, doc_sents_words):
     sent_words = result['sent_words']

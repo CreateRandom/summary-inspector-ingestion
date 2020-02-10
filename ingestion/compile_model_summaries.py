@@ -63,13 +63,19 @@ def load_single_file(filename, replace_chars=False):
         lines = file.readlines()
     if replace_chars:
         lines = [replace_characters(line) for line in lines]
-    return lines
+    entries = {}
+    ids = []
+    for i, line in enumerate(lines):
+        entries[i] = line
+        ids.append(i)
+    return entries, ids
 
 
-def load_all_files(path_a, replace_chars=False):
+def load_all_files(path_a, replace_chars=False, n = None):
     all_lines = {}
+    all_ids = []
 
-    for x in os.listdir(path_a):
+    for i, x in enumerate(os.listdir(path_a)):
 
         match = re.search('.*?(\d+).*', x)
 
@@ -84,8 +90,12 @@ def load_all_files(path_a, replace_chars=False):
                     total = replace_characters(total)
 
                 all_lines[id] = total
+                all_ids.append(id)
 
-    return all_lines
+        if n is not None and i +1 >= n:
+            break
+
+    return all_lines, all_ids
 
 # transformer lm data loading
 
@@ -95,10 +105,10 @@ path_presumm = '/home/klux/Thesis/available_outputs/PreSumm/test_abs.148000.gold
 path_lm = '/home/klux/Thesis/available_outputs/transformer_lm/tgt'
 
 
-chen_ref = load_all_files(path_chen, replace_chars=True)
-see_ref = load_all_files(path_see, replace_chars=True)
-presumm_ref = load_single_file(path_presumm, replace_chars=True)
-lm_ref = load_all_files(path_lm, replace_chars=True)
+chen_ref, chen_ids = load_all_files(path_chen, replace_chars=True)
+see_ref, see_ids = load_all_files(path_see, replace_chars=True)
+presumm_ref, presumm_ids = load_single_file(path_presumm, replace_chars=True)
+lm_ref, lm_ids = load_all_files(path_lm, replace_chars=True)
 
 
 print(len(chen_ref))
@@ -112,18 +122,42 @@ for i, x in tqdm(list(see_ref.items())):
     for j, y in chen_ref.items():
         if x == y:
             item['chen_id'] = j
+            del chen_ref[j]
+          #  chen_ids.remove(j)
             break
-    for k, z in enumerate(presumm_ref):
+    for k, z in presumm_ref.items():
         if x == z:
             item['presumm_id'] = k
+            del presumm_ref[k]
+           # presumm_ids.remove(k)
             break
 
     for l, a in lm_ref.items():
         if x == a:
             item['lm_id'] = l
+            del lm_ref[l]
+            # lm_ids.remove(l)
             break
 
     items.append(item)
+
+# remove the matched items
+
+# def get_dict_subset(ids, dict):
+#     new_dict = {}
+#     for id in ids:
+#         new_dict[id] = dict[id]
+#     return new_dict
+#
+# chen_ref = get_dict_subset(chen_ids, chen_ref)
+# presumm_ref = get_dict_subset(presumm_ids, presumm_ref)
+# lm_ref = get_dict_subset(lm_ids, lm_ref)
+
+print(len(chen_ref))
+print(len(see_ref))
+print(len(presumm_ref))
+print(len(lm_ref))
+
 
 item_frame = pd.DataFrame(items)
 item_frame['article_id'] = item_frame['see_id']
@@ -138,14 +172,14 @@ print(f'Missing {len(chen_missing)} for chen')
 print(f'Missing {len(presumm_missing)} for presumm')
 print(f'Missing {len(lm_missing)} for lm')
 
-def fill_up_missing(missing_elems, ref_text_list, column_name):
+def fill_up_missing(missing_elems, ref_text_dict, column_name):
     for id, item in missing_elems.iterrows():
 
         current_see = see_ref[id]
         max_value = math.inf
         best_candidate = None
         best_index = None
-        for j, elem_to_comp in enumerate(ref_text_list):
+        for j, elem_to_comp in ref_text_dict.items():
             current = editdistance.eval(current_see, elem_to_comp)
             if current < max_value:
                 max_value = current
@@ -169,12 +203,12 @@ lm_summary_path = '/home/klux/Thesis/available_outputs/transformer_lm/gen'
 
 article_path = '/home/klux/Thesis/available_outputs/articles'
 
-chen_summaries = load_all_files(chen_summary_path)
-see_summaries = load_all_files(see_summary_path)
-presumm_summaries = load_single_file(presumm_summary_path)
-lm_summaries = load_all_files(lm_summary_path)
+chen_summaries, _ = load_all_files(chen_summary_path)
+see_summaries, _ = load_all_files(see_summary_path)
+presumm_summaries, _ = load_single_file(presumm_summary_path)
+lm_summaries, _ = load_all_files(lm_summary_path)
 
-articles = load_all_files(article_path)
+articles, ids = load_all_files(article_path)
 
 item_frame['article'] = item_frame.index.map(lambda x: articles[x])
 item_frame['see'] = item_frame.see_id.map(lambda x: see_summaries[x])

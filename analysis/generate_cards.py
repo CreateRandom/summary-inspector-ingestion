@@ -173,12 +173,16 @@ def render_summary_to_card(id, summary_collection, article_collection):
 
 
 def render_sentence_example(id, summary_collection, article_collection, sent_index, in_context=1, out_context=1):
+    if not isinstance(sent_index,list):
+        sent_index = [sent_index]
     art_sents, summ_sent, all_sents_referenced \
         = generate_latex_markup(id, summary_collection, article_collection,
-                                sent_highlight_colors= ['blue'],subset= [sent_index], highlight_altered=False)
+                                sent_highlight_colors= ['blue', 'green'],subset= sent_index, highlight_altered=False)
+    summ_sents = []
+    for i in range(len(sent_index)):
+        summ_sents.append(sanitize_latex(summ_sent[i]))
 
-
-    summ_sent = sanitize_latex(summ_sent[0])
+    summ_sent = '\\\\ \n'.join(summ_sents)
     min_id = min(all_sents_referenced)
     max_id = max(all_sents_referenced)
 
