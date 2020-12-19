@@ -19,7 +19,7 @@ def get_novel_ngrams(summary, document, n=2, language='english'):
     new_grams = [x[0] for x in sent_grams if x not in doc_grams]
     return new_grams
 
-def word_tokenize(string):
+def naive_word_tokenize(string):
     words = string.split(' ')
     words = [word for word in words if word is not '']
     return words
@@ -61,7 +61,7 @@ def analyze_sentence(sentence, document_sents):
 
     doc_sent_words_raw =[]
     for sent in document_sents:
-        sent_words = word_tokenize(sent)
+        sent_words = naive_word_tokenize(sent)
         doc_sent_words_raw.append(sent_words)
 
     # strip all special characters
@@ -69,15 +69,15 @@ def analyze_sentence(sentence, document_sents):
     # first, tokenize the document into sentences
     document_sents_words = []
     for sent in document_sents_stripped:
-        sent_words = word_tokenize(sent)
+        sent_words = naive_word_tokenize(sent)
         document_sents_words.append(sent_words)
 
     document_sents_words = FlexList(document_sents_words)
 
 
-    sent_words_raw = word_tokenize(sentence)
+    sent_words_raw = naive_word_tokenize(sentence)
     sentence = strip_special(sentence)
-    sent_words = word_tokenize(sentence)
+    sent_words = naive_word_tokenize(sentence)
     sent_words = FlexList(sent_words)
     state_vector = ['UNASSIGNED'] * len(sent_words)
 
@@ -460,7 +460,7 @@ test_cases = {'This sentence appears verbatim in the document.': 'VERBATIM',
 
 text_sents = text.split('. ')
 for sentence in test_cases.keys():
-    print(analyze_sentence(text_sents, sentence))
+    print(analyze_sentence(sentence, text_sents))
     print(test_cases[sentence])
 
 

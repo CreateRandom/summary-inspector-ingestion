@@ -9,7 +9,7 @@ import subprocess
 from pymongo import MongoClient
 from tqdm import tqdm
 
-from utils.sentence_diff import word_tokenize, strip_special
+from utils.sentence_diff import naive_word_tokenize, strip_special
 
 
 def draw_sample(collection, article_ids, n=30, seed=42):
@@ -65,13 +65,13 @@ def generate_latex_markup(id, summary_collection, article_collection, subset=Non
         sent_highlight_colors = default_colors
     article_text = article_collection.find_one({'_id': id})['article']
     art_sents = article_text.split('\n\n')
-    art_sents = [word_tokenize(sent) for sent in art_sents]
+    art_sents = [naive_word_tokenize(sent) for sent in art_sents]
     art_sent_dict = dict(enumerate(art_sents))
 
     summary = summary_collection.find_one({'_id': id})
     summary_analysis = summary['analysis']
     summ_sents = summary[summary_collection.name].split('\n\n')
-    summ_sents = [word_tokenize(sent) for sent in summ_sents]
+    summ_sents = [naive_word_tokenize(sent) for sent in summ_sents]
     summ_sent_dict = dict(enumerate(summ_sents))
 
     all_sents_referenced = set()
