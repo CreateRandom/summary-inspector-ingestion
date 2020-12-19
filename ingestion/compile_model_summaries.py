@@ -207,10 +207,15 @@ chen_summaries, _ = load_all_files(chen_summary_path)
 see_summaries, _ = load_all_files(see_summary_path)
 presumm_summaries, _ = load_single_file(presumm_summary_path)
 lm_summaries, _ = load_all_files(lm_summary_path)
+# load the reference summaries from See
+see_ref, _ = load_all_files(path_see)
 
 articles, ids = load_all_files(article_path)
 
 item_frame['article'] = item_frame.index.map(lambda x: articles[x])
+# add reference summaries as well
+item_frame['ref'] = item_frame.see_id.map(lambda x: see_ref[x])
+
 item_frame['see'] = item_frame.see_id.map(lambda x: see_summaries[x])
 item_frame['chen'] = item_frame.chen_id.map(lambda x: chen_summaries[x])
 item_frame['presumm'] = item_frame.presumm_id.map(lambda x: presumm_summaries[int(x)])

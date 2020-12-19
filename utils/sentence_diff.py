@@ -4,8 +4,20 @@ from collections import Counter
 import editdistance
 import numpy as np
 import difflib
+
+from nltk import word_tokenize, ngrams
 from rouge import Rouge
-from utils.text_utils import get_novel_ngrams
+
+
+def get_novel_ngrams(summary, document, n=2, language='english'):
+    if not isinstance(document, list):
+        document = word_tokenize(document, language)
+    doc_grams = set(ngrams(document, n=n))
+    if not isinstance(summary, list):
+        summary = word_tokenize(summary, language)
+    sent_grams = set(ngrams(summary, n=n))
+    new_grams = [x[0] for x in sent_grams if x not in doc_grams]
+    return new_grams
 
 def word_tokenize(string):
     words = string.split(' ')
@@ -446,43 +458,9 @@ test_cases = {'This sentence appears verbatim in the document.': 'VERBATIM',
               'Stevie, 47, a man from Tulsa, OK, was found to be a drug dealer.': 'INSERTION'}
 
 
-# text_sents = text.split('. ')
-# for sentence in test_cases.keys():
-#     print(analyze_sentence(text_sents, sentence))
-#     print(test_cases[sentence])
+text_sents = text.split('. ')
+for sentence in test_cases.keys():
+    print(analyze_sentence(text_sents, sentence))
+    print(test_cases[sentence])
 
 
-def generate_overlapping_sections(text_a, text_b):
-    doc_sents = text_a.split('\n\n')
-    # TODO finetune this
-    text_a = text_a.replace('\n', ' ')
-    # assume this is a str that contains sentences split by newlines
-    sents_b = text_b.split('\n')
-
-    text_a = text_a.split(' ')
-
-    sm = difflib.SequenceMatcher()
-    string_matches = []
-
-    for sent_b in sents_b:
-
-        string_matches_local = []
-        if sent_b is '':
-            continue
-
-        sent_b = sent_b.split(' ')
-        sm.set_seqs(text_a, sent_b)
-
-        matches = sm.get_matching_blocks()
-        for match in matches:
-            a, b, n = match
-            if n == 0:
-                continue
-            words_a = text_a[a:a + n]
-            concatenated = ' '.join(words_a)
-            if concatenated is '':
-                continue
-            string_matches_local.append(concatenated)
-        string_matches.append(string_matches_local)
-
-    return string_matches

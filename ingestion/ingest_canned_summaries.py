@@ -21,20 +21,24 @@ def simple_sent_tokenize(text):
     sents = [sent for sent in sents if sent]
     return sents
 
-def analyze_sents(article_text, summary_text):
+def analyze_summary_sents(article_sents, summary_sents):
     results = []
-    article_sents = simple_sent_tokenize(article_text)
-    summary_sents = simple_sent_tokenize(summary_text)
     for sent in summary_sents:
         analysis = analyze_sentence(sent, article_sents)
+        analysis['sentence'] = sent
         results.append(analysis)
-
     return results
+
+def analyze_summary_text(article_text, summary_text):
+    article_sents = simple_sent_tokenize(article_text)
+    summary_sents = simple_sent_tokenize(summary_text)
+
+    return analyze_summary_sents(article_sents, summary_sents)
 
 def generate_analysis(row, column_to_analyze):
     article_text = row['article']
     summary_text = row[column_to_analyze]
-    return analyze_sents(article_text, summary_text)
+    return analyze_summary_text(article_text, summary_text)
 
 def classify_summary(column_with_sents):
     types = []
@@ -60,18 +64,21 @@ def prepare_data_for_db(path_to_json, db):
     # load the summary data created with compile_model_summaries
     summary_frame = pd.read_json(path_to_json)
 
+    # optionally filter out a subset
+
  #   summary_frame = summary_frame[0:3]
     summary_frame['article'] = summary_frame['article'].apply(lambda x: x.replace(' . ', '.\n\n'))
     summary_frame['article'] = summary_frame['article'].apply(lambda x: x.replace('? ', '?\n\n'))
     summary_frame['article'] = summary_frame['article'].apply(lambda x: x.replace('! ', '!\n\n'))
 
-    # split into three separate frames (one for each summary type)
-    # TODO think about all the replacements
+    # split into separate frames (one for each summary type)
     rep_func = lambda x: re.sub(r' (.)\n', r'\1\n\n',x)
     summary_frame['see'] = summary_frame['see'].apply(rep_func)
+    summary_frame['ref'] = summary_frame['ref'].apply(rep_func)
     summary_frame['presumm'] = summary_frame['presumm'].apply(lambda x: x.replace('<q>', '\n\n'))
     # sometimes, two spaces are generated instead of the separator token, manual fix for now
     summary_frame['presumm'] = summary_frame['presumm'].apply(lambda x: x.replace('  ', '\n\n'))
+
     summary_frame['chen'] = summary_frame['chen'].apply(rep_func)
     summary_frame['lm'] = summary_frame['lm'].apply(rep_func)
 
@@ -80,39 +87,57 @@ def prepare_data_for_db(path_to_json, db):
     summary_frame['lm'] = summary_frame['lm'].apply(left)
     summary_frame['lm'] = summary_frame['lm'].apply(right)
 
-    # SEE
-    summary_frame['see_sents_anaylsis'] = summary_frame.progress_apply(func=(lambda row: generate_analysis(row,'see')), axis=1)
-    summary_frame['see_state'] = summary_frame['see_sents_anaylsis'].progress_apply(func=classify_summary)
-    see = summary_frame[['see_id', 'see', 'see_sents_anaylsis', 'see_state']].copy()
+    def rename_id(see_id):
+        code = see_id.split('_')[1]
+        return 'ref_' + code
+
+    # REF
+    summary_frame['ref_sents_anaylsis'] = summary_frame.progress_apply(func=(lambda row: generate_analysis(row,'ref')), axis=1)
+    summary_frame['ref_state'] = summary_frame['ref_sents_anaylsis'].progress_apply(func=classify_summary)
+    summary_frame['ref_id'] = summary_frame['see_id'].progress_apply(func=rename_id)
+    ref = summary_frame[['ref_id', 'ref', 'ref_sents_anaylsis', 'ref_state']].copy()
     # small hack to have a consistent id scheme
-    see['_id'] = see.index
-    see.rename(columns={'see_sents_anaylsis': 'analysis', 'see_state' : 'summary_state'}, inplace=True)
-    store_dataframe_in_db(see, db.see)
-    del see
-    # CHEN
-    summary_frame['chen_sents_anaylsis'] = summary_frame.progress_apply(func=(lambda row: generate_analysis(row, 'chen')), axis=1)
-    summary_frame['chen_state'] = summary_frame['chen_sents_anaylsis'].progress_apply(func=classify_summary)
-    chen = summary_frame[['chen_id', 'chen', 'chen_sents_anaylsis', 'chen_state']].copy()
-    chen['_id'] = chen.index
-    chen.rename(columns={'chen_sents_anaylsis': 'analysis', 'chen_state' : 'summary_state'}, inplace=True)
-    store_dataframe_in_db(chen, db.chen)
-    del chen
-    # PRESUMM
-    summary_frame['presumm_sents_analysis'] = summary_frame.progress_apply(func=(lambda row: generate_analysis(row, 'presumm')), axis=1)
-    summary_frame['presumm_state'] = summary_frame['presumm_sents_analysis'].progress_apply(func=classify_summary)
-    presumm = summary_frame[['presumm_id', 'presumm', 'presumm_sents_analysis', 'presumm_state']].copy()
-    presumm['_id'] = presumm.index
-    presumm.rename(columns={'presumm_sents_analysis': 'analysis', 'presumm_state' : 'summary_state'}, inplace=True)
-    store_dataframe_in_db(presumm, db.presumm)
-    del presumm
-    # LM
-    summary_frame['lm_sents_analysis'] = summary_frame.progress_apply(func=(lambda row: generate_analysis(row, 'lm')), axis=1)
-    summary_frame['lm_state'] = summary_frame['lm_sents_analysis'].progress_apply(func=classify_summary)
-    lm = summary_frame[['lm_id', 'lm', 'lm_sents_analysis', 'lm_state']].copy()
-    lm['_id'] = lm.index
-    lm.rename(columns={'lm_sents_analysis': 'analysis', 'lm_state' : 'summary_state'}, inplace=True)
-    store_dataframe_in_db(lm, db.lm)
-    del lm
+    ref['_id'] = ref.index
+    ref.rename(columns={'ref_sents_anaylsis': 'analysis', 'ref_state' : 'summary_state'}, inplace=True)
+  #  store_dataframe_in_db(ref, db.ref)
+
+    store_summs = False
+
+    if store_summs:
+
+        # SEE
+        summary_frame['see_sents_anaylsis'] = summary_frame.progress_apply(func=(lambda row: generate_analysis(row,'see')), axis=1)
+        summary_frame['see_state'] = summary_frame['see_sents_anaylsis'].progress_apply(func=classify_summary)
+        see = summary_frame[['see_id', 'see', 'see_sents_anaylsis', 'see_state']].copy()
+        # small hack to have a consistent id scheme
+        see['_id'] = see.index
+        see.rename(columns={'see_sents_anaylsis': 'analysis', 'see_state' : 'summary_state'}, inplace=True)
+  #      store_dataframe_in_db(see, db.see)
+        del see
+        # CHEN
+        summary_frame['chen_sents_anaylsis'] = summary_frame.progress_apply(func=(lambda row: generate_analysis(row, 'chen')), axis=1)
+        summary_frame['chen_state'] = summary_frame['chen_sents_anaylsis'].progress_apply(func=classify_summary)
+        chen = summary_frame[['chen_id', 'chen', 'chen_sents_anaylsis', 'chen_state']].copy()
+        chen['_id'] = chen.index
+        chen.rename(columns={'chen_sents_anaylsis': 'analysis', 'chen_state' : 'summary_state'}, inplace=True)
+ #       store_dataframe_in_db(chen, db.chen)
+        del chen
+        # PRESUMM
+        summary_frame['presumm_sents_analysis'] = summary_frame.progress_apply(func=(lambda row: generate_analysis(row, 'presumm')), axis=1)
+        summary_frame['presumm_state'] = summary_frame['presumm_sents_analysis'].progress_apply(func=classify_summary)
+        presumm = summary_frame[['presumm_id', 'presumm', 'presumm_sents_analysis', 'presumm_state']].copy()
+        presumm['_id'] = presumm.index
+        presumm.rename(columns={'presumm_sents_analysis': 'analysis', 'presumm_state' : 'summary_state'}, inplace=True)
+ #       store_dataframe_in_db(presumm, db.presumm)
+        del presumm
+        # LM
+        summary_frame['lm_sents_analysis'] = summary_frame.progress_apply(func=(lambda row: generate_analysis(row, 'lm')), axis=1)
+        summary_frame['lm_state'] = summary_frame['lm_sents_analysis'].progress_apply(func=classify_summary)
+        lm = summary_frame[['lm_id', 'lm', 'lm_sents_analysis', 'lm_state']].copy()
+        lm['_id'] = lm.index
+        lm.rename(columns={'lm_sents_analysis': 'analysis', 'lm_state' : 'summary_state'}, inplace=True)
+  #      store_dataframe_in_db(lm, db.lm)
+        del lm
 
     store_articles = False
     if store_articles:
